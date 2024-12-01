@@ -1,19 +1,23 @@
 const { default: axios } = require('axios')
+const createOption = require('../util/option.js')
 module.exports = async (query, request) => {
   let ext = 'mp3'
-  if (query.songFile.name.indexOf('flac') > -1) {
-    ext = 'flac'
+  // if (query.songFile.name.indexOf('flac') > -1) {
+  //   ext = 'flac'
+  // }
+  if (query.songFile.name.includes('.')) {
+    ext = query.songFile.name.split('.').pop()
   }
   const filename = query.songFile.name
     .replace('.' + ext, '')
     .replace(/\s/g, '')
     .replace(/\./g, '_')
+  const bucket = 'jd-musicrep-privatecloud-audio-public'
   //   获取key和token
   const tokenRes = await request(
-    'POST',
-    `https://music.163.com/weapi/nos/token/alloc`,
+    `/api/nos/token/alloc`,
     {
-      bucket: 'jd-musicrep-privatecloud-audio-public',
+      bucket: bucket,
       ext: ext,
       filename: filename,
       local: false,
@@ -21,15 +25,21 @@ module.exports = async (query, request) => {
       type: 'audio',
       md5: query.songFile.md5,
     },
-    { crypto: 'weapi', cookie: query.cookie, proxy: query.proxy },
+    createOption(query, 'weapi'),
   )
 
   // 上传
   const objectKey = tokenRes.body.result.objectKey.replace('/', '%2F')
   try {
+    const lbs = (
+      await axios({
+        method: 'get',
+        url: `https://wanproxy.127.net/lbs?version=1.0&bucketname=${bucket}`,
+      })
+    ).data
     await axios({
       method: 'post',
-      url: `http://45.127.129.8/jd-musicrep-privatecloud-audio-public/${objectKey}?offset=0&complete=true&version=1.0`,
+      url: `${lbs.upload[0]}/${bucket}/${objectKey}?offset=0&complete=true&version=1.0`,
       headers: {
         'x-nos-token': tokenRes.body.result.token,
         'Content-MD5': query.songFile.md5,
